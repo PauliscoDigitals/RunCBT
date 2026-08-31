@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Student Examination Engine</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Supabase CDN Script -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+
+  <style>
+    :root {
+      --primary: #2563eb;
+      --bg-main: #f8fafc;
+      --card-bg: #ffffff;
+      --text-main: #0f172a;
+      --border: #e2e8f0;
+      --danger: #ef4444;
+      --success: #10b981;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', sans-serif; user-select: none; }
+    body { background: var(--bg-main); color: var(--text-main); display: flex; flex-direction: column; min-height: 100vh; position: relative; }
+
+    .hidden { display: none !important; }
+    .btn { padding: 0.65rem 1.25rem; border-radius: 6px; border: none; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-success { background: var(--success); color: white; }
+
+    /* Spinner Overlay */
+    #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.7); z-index: 9999; display: flex; flex-direction: column; justify-content: center; align-items: center; color: white; gap: 1rem; }
+    .spinner { width: 50px; height: 50px; border: 5px solid rgba(255, 255, 255, 0.3); border-radius: 50%; border-top-color: white; animation: spin 1s ease-in-out infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .auth-card { max-width: 450px; margin: 4rem auto; background: white; padding: 2rem; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); width: 90%; }
+    .form-group { margin-bottom: 1rem; }
+    .form-group label { display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.4rem; }
+    .form-group input { width: 100%; padding: 0.65rem; border: 1px solid var(--border); border-radius: 6px; outline: none; }
+
+    .top-nav { background: white; border-bottom: 1px solid var(--border); padding: 1rem 2rem; display: flex; justify-content: space-between; align-items: center; }
+    .user-info { display: flex; align-items: center; gap: 1rem; }
+    .user-info img { width: 45px; height: 45px; border-radius: 50%; object-fit: cover; }
+    .timer-badge { background: #fee2e2; color: #dc2626; padding: 0.5rem 1rem; border-radius: 20px; font-weight: 700; font-size: 1.1rem; border: 1px solid #fca5a5; }
+
+    .exam-container { max-width: 1000px; margin: 2rem auto; width: 95%; display: grid; grid-template-columns: 1fr 280px; gap: 1.5rem; }
+    .card { background: white; padding: 1.5rem; border-radius: 10px; border: 1px solid var(--border); }
+
+    .subject-tabs { display: flex; gap: 0.5rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+    .sub-tab-btn { padding: 0.5rem 1rem; border: 1px solid var(--border); background: #f1f5f9; border-radius: 6px; cursor: pointer; font-weight: 600; }
+    .sub-tab-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+    .question-img-preview { max-width: 100%; max-height: 250px; border-radius: 8px; margin-bottom: 1rem; border: 1px solid var(--border); cursor: pointer; }
+
+    .options-stack { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1rem; }
+    .opt-label { padding: 0.85rem; border: 1px solid var(--border); border-radius: 6px; display: flex; align-items: center; gap: 0.75rem; cursor: pointer; transition: background 0.2s; }
+    .opt-label:hover { background: #f8fafc; }
+
+    .palette-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 0.5rem; margin-top: 1rem; }
+    .q-box { width: 40px; height: 40px; border-radius: 6px; display: flex; justify-content: center; align-items: center; font-weight: 700; cursor: pointer; background: var(--danger); color: white; }
+    .q-box.attempted { background: var(--success); }
+    .q-box.current { border: 2px solid #000; }
+
+    .webcam-box { width: 100%; height: 160px; background: #000; border-radius: 6px; overflow: hidden; position: relative; margin-bottom: 1rem; }
+    .webcam-box video { width: 100%; height: 100%; object-fit: cover; }
+    .webcam-indicator { position: absolute; top: 8px; left: 8px; background: rgba(220, 38, 38, 0.85); color: white; font-size: 0.7rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; display: flex; align-items: center; gap: 4px; }
+    .dot { width: 6px; height: 6px; background: white; border-radius: 50%; animation: pulse 1s infinite; }
+
+    @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.2; } 100% { opacity: 1; } }
+
+    .modal { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+    .modal-content { background: white; padding: 2rem; border-radius: 8px; max-width: 500px; width: 90%; text-align: center; }
+
+    footer { background: #0f172a; color: #94a3b8; text-align: center; padding: 1rem; font-size: 0.85rem; margin-top: auto; }
+  </style>
+</head>
+<body>
+
+  <!-- Spinner Overlay -->
+  <div id="loading-overlay" class="hidden">
+    <div class="spinner"></div>
+    <p id="loading-text" style="font-weight: 600;">Processing request...</p>
+  </div>
+
+  <!-- Verification Login -->
+  <div id="std-auth" class="auth-card">
+    <h3 style="margin-bottom: 1rem; text-align: center;">CBT Student Portal</h3>
+    <form onsubmit="handleStudentLogin(event)">
+      <div class="form-group">
+        <label>10-Digit Examination Number</label>
+        <input type="text" id="login-num" maxlength="10" pattern="\d{10}" placeholder="e.g. 1234567001" required>
+      </div>
+      <div class="form-group">
+        <label>Examination ID / Code</label>
+        <input type="text" id="login-exam-id" placeholder="e.g. NSC2026" required>
+      </div>
+      <div class="form-group">
+        <label>Password (Surname)</label>
+        <input type="password" id="login-pass" placeholder="Surname" required>
+      </div>
+      <button type="submit" class="btn btn-primary" id="btn-login-submit" style="width: 100%;">Verify & Launch Proctored Exam</button><br><br>
+      
+      <p><b><span style="color: red;">Note: We recommend that any examination should be taken with a desktop computer to enjoy a smoother examination interface.</span></b></p>
+    </form>
+  </div>
+
+  <!-- Examination Workspace -->
+  <div id="std-workspace" class="hidden">
+    <header class="top-nav">
+      <div class="user-info">
+        <img id="top-std-photo" src="" alt="Candidate">
+        <div>
+          <h4 id="top-std-name">Candidate Name</h4>
+          <p style="font-size: 0.8rem; color: #64748b;" id="top-std-num"></p>
+        </div>
+      </div>
+      <div class="timer-badge" id="timer-display">00:00</div>
+    </header>
+
+    <div class="exam-container">
+      <main class="card">
+        <div id="subject-tabs-container" class="subject-tabs"></div>
+
+        <div style="display: flex; justify-content: space-between; margin-bottom: 1rem;">
+          <h4 id="q-number-header">Question 1</h4>
+        </div>
+
+        <p id="q-text-body" style="font-size: 1.1rem; margin-bottom: 1rem; font-weight: 500;">Question Text</p>
+        <div id="q-image-container"></div>
+
+        <div id="options-container" class="options-stack"></div>
+
+        <div style="display: flex; justify-content: space-between; margin-top: 2rem;">
+          <button id="btn-prev" class="btn btn-primary" onclick="navigateQuestion(-1)">Previous</button>
+          <button id="btn-next" class="btn btn-primary" onclick="navigateQuestion(1)">Next</button>
+          <button class="btn btn-success" onclick="confirmSubmission()">Submit Examination</button>
+        </div>
+      </main>
+
+      <aside class="card">
+        <h4>Candidate Proctoring</h4>
+        <div class="webcam-box" style="margin-top: 0.5rem;">
+          <video id="webcam-feed" autoplay playsinline muted></video>
+          <div class="webcam-indicator"><span class="dot"></span> REC / MONITORED</div>
+        </div>
+
+        <h4>Question Palette</h4>
+        <p style="font-size: 0.75rem; color: #64748b; margin-top: 0.2rem;">Red = Unattempted | Green = Attempted</p>
+        <div id="palette-grid" class="palette-grid"></div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Completion Modal -->
+  <div id="modal-completion" class="modal hidden">
+    <div class="modal-content">
+      <h2 style="color: var(--success); margin-bottom: 0.5rem;">Congratulations!</h2>
+      <p style="margin-bottom: 1.5rem; line-height: 1.5;">Now you have Successfully Completed your examination. Please visit the portal for more information.</p>
+      <button class="btn btn-primary" onclick="exitExamLockdown()">Exit Portal</button>
+    </div>
+  </div>
+
+  <footer>RunCBT Examination Engine<br>
+    &copy; 2026 Website engineered by Paulisco Digital Nigeria. All rights reserved.
+  </footer>
+
+  <script>
+    // --- SUPABASE CLIENT INITIALIZATION ---
+    const SUPABASE_URL = 'https://wemewahhnhlactrpcbgv.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_v47FYvMvn2niK0J7UV7uHw_IU5O_jZ9'; // Paste your key here
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let session = {
+      student: null,
+      exam: null,
+      randomizedQuestions: {},
+      activeSubject: '',
+      answers: {},
+      currentQIdx: 0,
+      timerSeconds: 0,
+      timerInterval: null,
+      mediaStream: null
+    };
+
+    function showLoader(text = "Processing request...") {
+      document.getElementById('loading-text').innerText = text;
+      document.getElementById('loading-overlay').classList.remove('hidden');
+    }
+
+    function hideLoader() {
+      document.getElementById('loading-overlay').classList.add('hidden');
+    }
+
+    function shuffleArray(array) {
+      let shuffled = [...array];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      return shuffled;
+    }
+
+    async function handleStudentLogin(e) {
+      e.preventDefault();
+      showLoader("Authenticating candidate and loading examination...");
+
+      const num = document.getElementById('login-num').value.trim();
+      const examId = document.getElementById('login-exam-id').value.trim();
+      const pass = document.getElementById('login-pass').value.trim();
+
+      try {
+        // 1. Fetch Student from Supabase
+        const { data: student, error: stdError } = await supabaseClient
+          .from('students')
+          .select('*')
+          .eq('exam_number', num)
+          .single();
+
+        if (stdError || !student) {
+          hideLoader();
+          alert("Invalid Examination Number.");
+          return;
+        }
+
+        if (student.sname.trim().toLowerCase() !== pass.toLowerCase()) {
+          hideLoader();
+          alert("Incorrect Surname Password.");
+          return;
+        }
+
+        // 2. Fetch Exam Metadata
+        const { data: exam, error: examError } = await supabaseClient
+          .from('exams')
+          .select('*')
+          .eq('exam_id', examId)
+          .single();
+
+        if (examError || !exam || exam.centre_code !== student.centre_code) {
+          hideLoader();
+          alert("Invalid Examination Code for your registered center.");
+          return;
+        }
+
+        // 3. Check for previous result attempt
+        const { data: existingResults } = await supabaseClient
+          .from('results')
+          .select('*')
+          .eq('exam_number', num)
+          .eq('exam_id', examId);
+
+        if (existingResults && existingResults.length > 0) {
+          hideLoader();
+          alert("Access Denied: You have already written this examination. Contact management to clear record.");
+          return;
+        }
+
+        // 4. Validate Exam Schedule
+        const now = new Date().getTime();
+        const start = new Date(exam.start).getTime();
+        const end = new Date(exam.end).getTime();
+
+        if (now < start) {
+          hideLoader();
+          alert(`Examination Lock: Scheduled to start at ${new Date(exam.start).toLocaleString()}`);
+          return;
+        }
+        if (now > end) {
+          hideLoader();
+          alert("Examination Ended: The window for this exam has closed.");
+          return;
+        }
+
+        // 5. Fetch Questions
+        const { data: questions, error: qError } = await supabaseClient
+          .from('questions')
+          .select('*')
+          .eq('exam_id', examId);
+
+        if (qError) {
+          hideLoader();
+          alert("Failed to fetch questions. Please try again.");
+          return;
+        }
+
+        const subjects = exam.subjects || [];
+        const questionMap = {};
+        subjects.forEach(sub => {
+          const rawQs = questions.filter(q => q.subject === sub);
+          questionMap[sub] = shuffleArray(rawQs);
+        });
+
+        navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+          .then(stream => {
+            hideLoader();
+            session.mediaStream = stream;
+            document.getElementById('webcam-feed').srcObject = stream;
+            
+            session.student = student;
+            session.exam = exam;
+            session.randomizedQuestions = questionMap;
+            session.activeSubject = subjects[0] || '';
+            session.timerSeconds = parseInt(exam.duration) * 60;
+
+            enableBrowserLockdown();
+            launchExamWorkspace();
+          })
+          .catch(err => {
+            hideLoader();
+            alert("Webcam Mandatory: You must grant webcam access to take this proctored examination.");
+          });
+
+      } catch (err) {
+        hideLoader();
+        console.error(err);
+        alert("An unexpected error occurred. Please check network connectivity.");
+      }
+    }
+
+    function enableBrowserLockdown() {
+      if (document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch(()=>{});
+      }
+      document.addEventListener('contextmenu', preventDefaultAction);
+      document.addEventListener('keydown', restrictKeys);
+      window.addEventListener('blur', warnTabSwitch);
+    }
+
+    function preventDefaultAction(e) { e.preventDefault(); }
+
+    function restrictKeys(e) {
+      if (e.ctrlKey || e.altKey || e.metaKey || e.key === 'F12' || e.key === 'Escape') {
+        e.preventDefault();
+        alert("Security Violation: Keyboard shortcuts and developer controls are locked during examinations.");
+      }
+    }
+
+    function warnTabSwitch() {
+      alert("WARNING: You left the examination window! This event has been flagged to proctors.");
+    }
+
+    function disableBrowserLockdown() {
+      document.removeEventListener('contextmenu', preventDefaultAction);
+      document.removeEventListener('keydown', restrictKeys);
+      window.removeEventListener('blur', warnTabSwitch);
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(()=>{});
+      }
+    }
+
+    function launchExamWorkspace() {
+      document.getElementById('std-auth').classList.add('hidden');
+      document.getElementById('std-workspace').classList.remove('hidden');
+
+      document.getElementById('top-std-photo').src = session.student.photo || 'https://via.placeholder.com/45';
+      document.getElementById('top-std-name').innerText = `${session.student.fname} ${session.student.sname}`;
+      document.getElementById('top-std-num').innerText = `Exam No: ${session.student.exam_number}`;
+
+      renderSubjectTabs();
+      loadQuestion();
+      startCountdownTimer();
+    }
+
+    function renderSubjectTabs() {
+      const container = document.getElementById('subject-tabs-container');
+      container.innerHTML = '';
+      (session.exam.subjects || []).forEach(sub => {
+        const activeClass = sub === session.activeSubject ? 'active' : '';
+        container.innerHTML += `<button class="sub-tab-btn ${activeClass}" onclick="switchSubject('${sub}')">${sub}</button>`;
+      });
+    }
+
+    function switchSubject(sub) {
+      session.activeSubject = sub;
+      session.currentQIdx = 0;
+      renderSubjectTabs();
+      loadQuestion();
+    }
+
+    function getSubjectQuestions() {
+      return session.randomizedQuestions[session.activeSubject] || [];
+    }
+
+    function loadQuestion() {
+      const questions = getSubjectQuestions();
+      const palette = document.getElementById('palette-grid');
+      palette.innerHTML = '';
+
+      if (questions.length === 0) {
+        document.getElementById('q-text-body').innerText = "No questions configured for this subject.";
+        document.getElementById('q-image-container').innerHTML = '';
+        document.getElementById('options-container').innerHTML = '';
+        return;
+      }
+
+      const q = questions[session.currentQIdx];
+      document.getElementById('q-number-header').innerText = `${session.activeSubject} - Question ${session.currentQIdx + 1} of ${questions.length}`;
+      document.getElementById('q-text-body').innerText = q.text;
+
+      const imgContainer = document.getElementById('q-image-container');
+      if (q.image) {
+        imgContainer.innerHTML = `<img src="${q.image}" class="question-img-preview" alt="Question Diagram" onclick="window.open(this.src)">`;
+      } else {
+        imgContainer.innerHTML = '';
+      }
+
+      const optsContainer = document.getElementById('options-container');
+      optsContainer.innerHTML = '';
+
+      const answerKey = `${session.activeSubject}_${session.currentQIdx}`;
+      const savedAns = session.answers[answerKey];
+
+      const optsObj = (typeof q.opts === 'string') ? JSON.parse(q.opts) : q.opts;
+
+      Object.keys(optsObj).forEach(k => {
+        const isChecked = savedAns === k;
+        optsContainer.innerHTML += `
+          <label class="opt-label" style="${isChecked ? 'background: #e0f2fe; border-color: var(--primary);' : ''}">
+            <input type="radio" name="opt" value="${k}" ${isChecked ? 'checked' : ''} onchange="recordAnswer('${k}')">
+            <strong>${k}.</strong> ${optsObj[k]}
+          </label>
+        `;
+      });
+
+      questions.forEach((_, idx) => {
+        const k = `${session.activeSubject}_${idx}`;
+        const isAttempted = !!session.answers[k];
+        const isCurrent = idx === session.currentQIdx;
+        palette.innerHTML += `
+          <div class="q-box ${isAttempted ? 'attempted' : ''} ${isCurrent ? 'current' : ''}" onclick="jumpToQuestion(${idx})">
+            ${idx + 1}
+          </div>
+        `;
+      });
+
+      document.getElementById('btn-prev').style.visibility = session.currentQIdx === 0 ? 'hidden' : 'visible';
+      document.getElementById('btn-next').style.visibility = session.currentQIdx === questions.length - 1 ? 'hidden' : 'visible';
+    }
+
+    function recordAnswer(optKey) {
+      const answerKey = `${session.activeSubject}_${session.currentQIdx}`;
+      session.answers[answerKey] = optKey;
+      loadQuestion();
+    }
+
+    function navigateQuestion(dir) {
+      session.currentQIdx += dir;
+      loadQuestion();
+    }
+
+    function jumpToQuestion(idx) {
+      session.currentQIdx = idx;
+      loadQuestion();
+    }
+
+    function startCountdownTimer() {
+      session.timerInterval = setInterval(() => {
+        session.timerSeconds--;
+        const m = Math.floor(session.timerSeconds / 60).toString().padStart(2, '0');
+        const s = (session.timerSeconds % 60).toString().padStart(2, '0');
+        document.getElementById('timer-display').innerText = `${m}:${s}`;
+
+        if (session.timerSeconds <= 0) {
+          clearInterval(session.timerInterval);
+          alert("Time Expired! Auto-submitting your examination now.");
+          processFinalSubmission();
+        }
+      }, 1000);
+    }
+
+    function confirmSubmission() {
+      if (confirm("Are you sure you want to finalize and submit your examination?")) {
+        clearInterval(session.timerInterval);
+        processFinalSubmission();
+      }
+    }
+
+    async function processFinalSubmission() {
+      showLoader("Submitting exam results securely to server...");
+
+      let totalQuestions = 0;
+      let totalCorrect = 0;
+      const subjectBreakdown = [];
+
+      (session.exam.subjects || []).forEach(sub => {
+        const qList = session.randomizedQuestions[sub] || [];
+        let subAttempted = 0;
+        let subCorrect = 0;
+        let subWrong = 0;
+
+        qList.forEach((q, idx) => {
+          totalQuestions++;
+          const ansKey = `${sub}_${idx}`;
+          const chosen = session.answers[ansKey];
+
+          if (chosen) {
+            subAttempted++;
+            if (chosen === q.correct) {
+              subCorrect++;
+              totalCorrect++;
+            } else {
+              subWrong++;
+            }
+          }
+        });
+
+        const subScore = qList.length > 0 ? Math.round((subCorrect / qList.length) * 100) : 0;
+        let grade = 'F';
+        if (subScore >= 70) grade = 'A';
+        else if (subScore >= 60) grade = 'B';
+        else if (subScore >= 50) grade = 'C';
+        else if (subScore >= 45) grade = 'D';
+
+        subjectBreakdown.push({
+          subjectName: sub,
+          attempted: subAttempted,
+          correct: subCorrect,
+          wrong: subWrong,
+          score: subScore,
+          grade: grade
+        });
+      });
+
+      const percentage = totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0;
+
+      const resultPayload = {
+        centre_code: session.student.centre_code,
+        exam_number: session.student.exam_number,
+        std_name: `${session.student.fname} ${session.student.sname}`,
+        exam_id: session.exam.exam_id,
+        exam_title: session.exam.title,
+        score: percentage,
+        subject_breakdown: subjectBreakdown,
+        completed_at: new Date().toISOString()
+      };
+
+      const { error } = await supabaseClient
+        .from('results')
+        .insert([resultPayload]);
+
+      hideLoader();
+
+      if (error) {
+        console.error("Supabase Save Error:", error.message);
+        alert("Error saving exam result online. Please alert the supervisor.");
+      }
+
+      if (session.mediaStream) {
+        session.mediaStream.getTracks().forEach(track => track.stop());
+      }
+
+      document.getElementById('modal-completion').classList.remove('hidden');
+    }
+
+    function exitExamLockdown() {
+      disableBrowserLockdown();
+      window.location.reload();
+    }
+  </script>
+</body>
+</html>
